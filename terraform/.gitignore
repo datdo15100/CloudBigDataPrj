@@ -1,0 +1,13 @@
+cat << 'EOF' > .gitignore
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+.crash
+*.tfvars
+*.tfvars.json
+
+# VSCode / IDE
+.vscode/
+.idea/
+EOF

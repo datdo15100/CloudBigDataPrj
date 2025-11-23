@@ -1,0 +1,109 @@
+---
+- name: Install Java and Spark on all nodes
+  hosts: all_spark
+  become: yes
+  gather_facts: yes
+
+  vars:
+    spark_version: "3.5.1"
+    hadoop_version: "3"
+    spark_package: "spark-{{ spark_version }}-bin-hadoop{{ hadoop_version }}"
+    spark_tgz_url: "https://archive.apache.org/dist/spark/spark-{{ spark_version }}/{{ spark_package }}.tgz"
+    spark_install_dir: "/opt/spark"
+    spark_user: "ubuntu"
+
+  tasks:
+    - name: Install base dependencies
+      apt:
+        name:
+          - openjdk-17-jdk
+          - python3
+          - wget
+          - tar
+        state: present
+        update_cache: yes
+
+    - name: Create spark group
+      group:
+        name: spark
+        state: present
+
+    - name: Add ubuntu user to spark group
+      user:
+        name: "{{ spark_user }}"
+        groups: spark
+        append: yes
+
+    - name: Download Spark tarball
+      get_url:
+        url: "{{ spark_tgz_url }}"
+        dest: "/tmp/{{ spark_package }}.tgz"
+        mode: '0644'
+
+    - name: Extract Spark
+      unarchive:
+        src: "/tmp/{{ spark_package }}.tgz"
+        dest: /opt
+        remote_src: yes
+        creates: "/opt/{{ spark_package }}"
+
+    - name: Symlink /opt/spark -> /opt/{{ spark_package }}
+      file:
+        src: "/opt/{{ spark_package }}"
+        dest: "{{ spark_install_dir }}"
+        state: link
+        owner: root
+        group: root
+
+    - name: Set Spark environment for all users
+      copy:
+        dest: /etc/profile.d/spark.sh
+        mode: '0644'
+        content: |
+          export SPARK_HOME={{ spark_install_dir }}
+          export PATH=$PATH:{{ spark_install_dir }}/bin:{{ spark_install_dir }}/sbin
+
+    - name: Ensure spark-env.sh exists from template
+      template:
+        src: templates/spark-env.sh.j2
+        dest: "{{ spark_install_dir }}/conf/spark-env.sh"
+        mode: '0755'
+
+    - name: Add spark-master hostname mapping in /etc/hosts
+      lineinfile:
+        path: /etc/hosts
+        line: "{{ hostvars[groups['master'][0]].ansible_default_ipv4.address }} spark-master"
+        state: present
+
+    - name: Create workers file on master
+      template:
+        src: templates/workers.j2
+        dest: "{{ spark_install_dir }}/conf/workers"
+        mode: '0644'
+      when: "'master' in group_names"
+
+- name: Start Spark master
+  hosts: master
+  become: yes
+  vars:
+    spark_install_dir: "/opt/spark"
+  tasks:
+    - name: Start Spark master
+      shell: |
+        {{ spark_install_dir }}/sbin/stop-master.sh || true
+        {{ spark_install_dir }}/sbin/start-master.sh
+      args:
+        executable: /bin/bash
+
+- name: Start Spark workers
+  hosts: workers
+  become: yes
+  vars:
+    spark_install_dir: "/opt/spark"
+  tasks:
+    - name: Start Spark worker
+      shell: |
+        {{ spark_install_dir }}/sbin/stop-worker.sh spark://spark-master:7077 || true
+        {{ spark_install_dir }}/sbin/start-worker.sh spark://spark-master:7077
+      args:
+        executable: /bin/bash
