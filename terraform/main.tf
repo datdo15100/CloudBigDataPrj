@@ -34,10 +34,18 @@ resource "google_compute_subnetwork" "spark_subnet" {
 resource "google_compute_firewall" "spark_allow_ssh_sparkui" {
   name    = "spark-allow-ssh-sparkui"
   network = google_compute_network.spark_vpc.name
+  project = var.project_id
 
   allow {
     protocol = "tcp"
-    ports    = ["22", "7077", "8080", "4040-4050"]
+    ports    = [
+      "22",
+      "7077",
+      "8080",
+      "4040-4050",
+      "9870",       
+      "9864"        
+    ]
   }
 
   source_ranges = ["0.0.0.0/0"]
@@ -103,7 +111,6 @@ resource "google_compute_instance" "spark_worker" {
   }
 }
 
-# --- Edge node (nơi submit job Spark) ---
 
 resource "google_compute_instance" "spark_edge" {
   name         = "spark-edge"

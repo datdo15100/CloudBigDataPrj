@@ -1,5 +1,5 @@
 cat << 'EOF' > .gitignore
-# Terraform
+# --- Terraform ---
 .terraform/
 *.tfstate
 *.tfstate.backup
@@ -7,7 +7,58 @@ cat << 'EOF' > .gitignore
 *.tfvars
 *.tfvars.json
 
-# VSCode / IDE
+# --- Spark / Hadoop runtime  ---
+spark-local/
+spark-logs/
+spark-work/
+*/spark-local/
+*/spark-logs/
+*/spark-work/
+/tmp/spark-*
+/tmp/hadoop-*
+
+# --- Java / Maven ---
+target/
+out/
+*.class
+*.log
+
+target/
+*.class
+*.jar
+
+
+# *.jar
+*.war
+*.ear
+
+# --- IDE / Editor ---
 .vscode/
 .idea/
+*.iml
+*.swp
+*.swo
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+
+# --- OS junk ---
+.DS_Store
+Thumbs.db
+
+# --- Secrets / Keys ---
+*.pem
+*.key
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+gcp_spark_key
+.env
+*.env
+
 EOF

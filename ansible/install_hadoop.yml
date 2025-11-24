@@ -1,0 +1,121 @@
+---
+# P1: Install Hadoop master and workers
+- name: Install Hadoop on Spark cluster nodes
+  hosts: master,workers
+  become: yes
+
+  vars:
+    hadoop_version: "3.4.2"
+    hadoop_install_dir: "/opt"
+    hadoop_home: "{{ hadoop_install_dir }}/hadoop-{{ hadoop_version }}"
+    hadoop_url: "https://downloads.apache.org/hadoop/common/hadoop-{{ hadoop_version }}/hadoop-{{ hadoop_version }}.tar.gz"
+    hadoop_name_dir: "/var/lib/hadoop/hdfs/namenode"
+    hadoop_data_dir: "/var/lib/hadoop/hdfs/datanode"
+    java_home: "/usr/lib/jvm/java-17-openjdk-amd64"
+
+  tasks:
+    - name: Ensure base packages for Hadoop
+      apt:
+        name:
+          - wget
+          - tar
+        state: present
+        update_cache: yes
+
+    - name: Create HDFS data directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        mode: "0755"
+      loop:
+        - "{{ hadoop_name_dir }}"
+        - "{{ hadoop_data_dir }}"
+
+    - name: Download Hadoop {{ hadoop_version }}
+      get_url:
+        url: "{{ hadoop_url }}"
+        dest: "/tmp/hadoop-{{ hadoop_version }}.tar.gz"
+        mode: "0644"
+
+    - name: Extract Hadoop
+      unarchive:
+        src: "/tmp/hadoop-{{ hadoop_version }}.tar.gz"
+        dest: "{{ hadoop_install_dir }}"
+        remote_src: yes
+        creates: "{{ hadoop_home }}"
+
+    - name: Ensure ownership of Hadoop dir
+      file:
+        path: "{{ hadoop_home }}"
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        recurse: yes
+
+    - name: Install Hadoop env script in /etc/profile.d
+      template:
+        src: "hadoop-profile.sh.j2"
+        dest: "/etc/profile.d/hadoop.sh"
+        mode: "0755"
+
+    - name: Configure core-site.xml
+      template:
+        src: "hadoop-core-site.xml.j2"
+        dest: "{{ hadoop_home }}/etc/hadoop/core-site.xml"
+        owner: ubuntu
+        group: ubuntu
+        mode: "0644"
+
+    - name: Configure hdfs-site.xml
+      template:
+        src: "hadoop-hdfs-site.xml.j2"
+        dest: "{{ hadoop_home }}/etc/hadoop/hdfs-site.xml"
+        owner: ubuntu
+        group: ubuntu
+        mode: "0644"
+
+    - name: Configure hadoop-env.sh
+      template:
+        src: "hadoop-env.sh.j2"
+        dest: "{{ hadoop_home }}/etc/hadoop/hadoop-env.sh"
+        owner: ubuntu
+        group: ubuntu
+        mode: "0755"
+
+# P2. Format NameNode (run only once, on master)
+- name: Format HDFS NameNode (first time only)
+  hosts: master
+  become: yes
+
+  vars:
+    hadoop_version: "3.4.2"
+    hadoop_install_dir: "/opt"
+    hadoop_home: "{{ hadoop_install_dir }}/hadoop-{{ hadoop_version }}"
+    hadoop_name_dir: "/var/lib/hadoop/hdfs/namenode"
+
+  tasks:
+    - name: Format namenode if not yet formatted
+      command: "{{ hadoop_home }}/bin/hdfs namenode -format -force -nonInteractive"
+      args:
+        creates: "{{ hadoop_name_dir }}/current"
+
+# P3. Start HDFS daemons (NameNode + DataNode)
+- name: Start HDFS daemons
+  hosts: master
+  become: yes
+
+  vars:
+    hadoop_version: "3.4.2"
+    hadoop_install_dir: "/opt"
+    hadoop_home: "{{ hadoop_install_dir }}/hadoop-{{ hadoop_version }}"
+
+  tasks:
+    - name: Start NameNode on master
+      command: "{{ hadoop_home }}/bin/hdfs --daemon start namenode"
+
+    - name: Start DataNode on workers (delegated)
+      delegate_to: "{{ item }}"
+      loop: "{{ groups['workers'] }}"
+      command: "{{ hadoop_home }}/bin/hdfs --daemon start datanode"
